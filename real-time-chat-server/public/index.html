@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Chat</title>
+    <title>Real-Time Chat with Rooms</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -38,7 +38,8 @@
         }
         .message.system { background: #e0e0e0; }
         .message.user { background: #d1e7ff; }
-        input, button {
+        .message.private { background: #ffcccb; }
+        input, button, select {
             padding: 10px;
             margin: 5px 0;
             border: 1px solid #ccc;
@@ -51,7 +52,7 @@
             cursor: pointer;
         }
         button:hover { background: #0056b3; }
-        #user-list {
+        #user-list, #current-room {
             margin-top: 10px;
             font-size: 0.9em;
             color: #555;
@@ -63,11 +64,17 @@
         <div id="username-form">
             <h2>Join Chat</h2>
             <input type="text" id="username" placeholder="Enter your username" required>
+            <input type="text" id="room" placeholder="Enter room name" required>
             <button onclick="joinChat()">Join</button>
         </div>
         <div id="chat">
-            <h2>Chat Room</h2>
+            <h2>Chat Room: <span id="current-room"></span></h2>
             <div id="user-list"></div>
+            <input type="text" id="new-room" placeholder="Enter new room name">
+            <button onclick="changeRoom()">Change Room</button>
+            <select id="recipient">
+                <option value="">Broadcast to room</option>
+            </select>
             <div id="messages"></div>
             <input type="text" id="message-input" placeholder="Type a message" required>
             <button onclick="sendMessage()">Send</button>
@@ -77,21 +84,37 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+        let currentRoom = '';
 
         function joinChat() {
             const username = document.getElementById('username').value.trim();
-            if (username) {
-                socket.emit('join', username);
+            const room = document.getElementById('room').value.trim();
+            if (username && room) {
+                socket.emit('join', { username, room });
                 document.getElementById('username-form').style.display = 'none';
                 document.getElementById('chat').style.display = 'block';
+                currentRoom = room;
+            }
+        }
+
+        function changeRoom() {
+            const newRoom = document.getElementById('new-room').value.trim();
+            if (newRoom) {
+                socket.emit('changeRoom', newRoom);
+                document.getElementById('new-room').value = '';
             }
         }
 
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
+            const recipient = document.getElementById('recipient').value;
             if (message) {
-                socket.emit('chatMessage', message);
+                if (recipient) {
+                    socket.emit('privateMessage', { recipient, message });
+                } else {
+                    socket.emit('chatMessage', { message, room: currentRoom });
+                }
                 input.value = '';
             }
         }
@@ -100,8 +123,8 @@
         socket.on('message', (data) => {
             const messages = document.getElementById('messages');
             const messageElement = document.createElement('div');
-            messageElement.classList.add('message', data.user === 'System' ? 'system' : 'user');
-            messageElement.innerHTML = `<strong>${data.user}</strong> (${data.timestamp}): ${data.text}`;
+            messageElement.classList.add('message', data.isPrivate ? 'private' : data.user === 'System' ? 'system' : 'user');
+            messageElement.innerHTML = `<strong>${data.user}</strong> (${data.timestamp})${data.isPrivate ? ' [Private]' : ''}: ${data.text}`;
             messages.appendChild(messageElement);
             messages.scrollTop = messages.scrollHeight;
         });
@@ -109,7 +132,21 @@
         // Handle user list updates
         socket.on('userList', (users) => {
             const userList = document.getElementById('user-list');
-            userList.innerHTML = `Online Users: ${users.join(', ') || 'None'}`;
+            userList.innerHTML = `Online Users in Room: ${users.join(', ') || 'None'}`;
+            const recipientSelect = document.getElementById('recipient');
+            recipientSelect.innerHTML = '<option value="">Broadcast to room</option>';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                recipientSelect.appendChild(option);
+            });
+        });
+
+        // Update current room display
+        socket.on('setRoom', (room) => {
+            currentRoom = room;
+            document.getElementById('current-room').textContent = room;
         });
 
         // Allow sending messages with Enter key
@@ -118,6 +155,9 @@
         });
         document.getElementById('username').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') joinChat();
+        });
+        document.getElementById('new-room').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') changeRoom();
         });
     </script>
 </body>
