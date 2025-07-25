@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        #chat-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #username-form, #chat {
+            display: flex;
+            flex-direction: column;
+        }
+        #chat { display: none; }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .message.system { background: #e0e0e0; }
+        .message.user { background: #d1e7ff; }
+        input, button {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        #user-list {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="username-form">
+            <h2>Join Chat</h2>
+            <input type="text" id="username" placeholder="Enter your username" required>
+            <button onclick="joinChat()">Join</button>
+        </div>
+        <div id="chat">
+            <h2>Chat Room</h2>
+            <div id="user-list"></div>
+            <div id="messages"></div>
+            <input type="text" id="message-input" placeholder="Type a message" required>
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        function joinChat() {
+            const username = document.getElementById('username').value.trim();
+            if (username) {
+                socket.emit('join', username);
+                document.getElementById('username-form').style.display = 'none';
+                document.getElementById('chat').style.display = 'block';
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            if (message) {
+                socket.emit('chatMessage', message);
+                input.value = '';
+            }
+        }
+
+        // Handle incoming messages
+        socket.on('message', (data) => {
+            const messages = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', data.user === 'System' ? 'system' : 'user');
+            messageElement.innerHTML = `<strong>${data.user}</strong> (${data.timestamp}): ${data.text}`;
+            messages.appendChild(messageElement);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Handle user list updates
+        socket.on('userList', (users) => {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = `Online Users: ${users.join(', ') || 'None'}`;
+        });
+
+        // Allow sending messages with Enter key
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        document.getElementById('username').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinChat();
+        });
+    </script>
+</body>
+</html>
